@@ -1,0 +1,74 @@
+/**
+* Filters Proxy HTTP history for requests with vulnerable parameters based on the OWASP Top 25
+* @author Cyber0x01 (https://github.com/cyber0x01 )
+* Implements colour highlighting for each class of vulnerability along with
+* automatic note annotations detailing the parameter to test and class of vulnerability.
+**/
+
+// Define vulnerable parameter group record
+record VulnParamGroup(String title, HighlightColor color, String... parameterNames) {}
+
+// Vulnerable Parameter Groups
+VulnParamGroup ssrf = new VulnParamGroup("SSRF", HighlightColor.GREEN, "dest", "redirect", "uri", "path", "continue", "url", "window", "next", "data", "reference", "site", "html", "val", "validate", "domain", "callback", "return", "page", "feed", "host", "port", "to", "out", "view", "dir");
+VulnParamGroup sql = new VulnParamGroup("SQL", HighlightColor.BLUE, "id", "page", "report", "dir", "search", "category", "file", "class", "url", "news", "item", "menu", "lang", "name", "ref", "title", "view", "topic", "thread", "type", "date", "form", "main", "nav", "region");
+VulnParamGroup xss = new VulnParamGroup("XSS", HighlightColor.ORANGE, "q", "s", "search", "id", "lang", "keyword", "query", "page", "keywords", "year", "view", "email", "type", "name", "p", "month", "image", "list_type", "url", "terms", "categoryid", "key", "l", "begindate", "enddate");
+VulnParamGroup lfi = new VulnParamGroup("LFI", HighlightColor.YELLOW, "cat", "dir", "action", "board", "date", "detail", "file", "download", "path", "folder", "prefix", "include", "page", "inc", "locate", "show", "doc", "site", "type", "view", "content", "document", "layout", "mod", "conf");
+VulnParamGroup or = new VulnParamGroup("OR", HighlightColor.PINK, "next", "url", "target", "rurl", "dest", "destination", "redir", "redirect_uri", "redirect_url", "redirect", "out", "view", "to", "image_url", "go", "return", "returnTo", "return_to", "checkout_url", "continue", "return_path");
+VulnParamGroup rce = new VulnParamGroup("RCE", HighlightColor.RED, "cmd", "exec", "command", "execute", "ping", "query", "jump", "code", "reg", "do", "func", "arg", "option", "load", "process", "step", "read", "feature", "exe", "module", "payload", "run", "print");
+VulnParamGroup idor = new VulnParamGroup("IDOR", HighlightColor.CYAN, "user_id", "account_id", "profile_id", "order_id", "uid", "pid", "cid", "gid", "cart_id", "file_id", "resource_id", "token", "customer_id", "session_id", "group_id", "member_id");
+VulnParamGroup cmdInjection = new VulnParamGroup("Command Injection", HighlightColor.DARK_RED, "cmd", "exec", "command", "execute", "run", "operation", "task", "action", "shell", "powershell", "bash", "command_exec");
+VulnParamGroup pathTraversal = new VulnParamGroup("Path Traversal", HighlightColor.GRAY, "file", "path", "folder", "directory", "locate", "show", "doc", "page", "download", "content", "resource", "load", "template");
+VulnParamGroup authBypass = new VulnParamGroup("Authentication Bypass", HighlightColor.LIGHT_BLUE, "username", "user", "password", "passwd", "token", "auth", "session", "id", "login", "credential", "key");
+VulnParamGroup xxe = new VulnParamGroup("XXE", HighlightColor.LIGHT_GREEN, "xml", "input", "data", "doc", "document", "request", "file", "entity", "feed", "content", "type");
+VulnParamGroup fileUpload = new VulnParamGroup("File Upload", HighlightColor.LIGHT_YELLOW, "file", "upload", "image", "doc", "document", "pdf", "avatar", "profile_pic", "attachment", "photo");
+VulnParamGroup rfi = new VulnParamGroup("RFI", HighlightColor.LIGHT_ORANGE, "url", "link", "load", "file", "include", "template", "path", "resource", "page", "module");
+VulnParamGroup csrf = new VulnParamGroup("CSRF", HighlightColor.PURPLE, "csrf_token", "token", "authenticity_token", "session_id", "access_token", "req_token");
+VulnParamGroup htmlInjection = new VulnParamGroup("HTML Injection", HighlightColor.LIGHT_PINK, "content", "html", "body", "message", "desc", "description", "data", "snippet");
+VulnParamGroup fileInclusion = new VulnParamGroup("File Inclusion", HighlightColor.BROWN, "file", "include", "path", "template", "page", "doc", "document", "resource");
+VulnParamGroup insecureDeserialization = new VulnParamGroup("Insecure Deserialization", HighlightColor.GOLD, "data", "payload", "object", "serialized", "session", "input", "body");
+
+// Toggle for highlighting
+boolean highlightEnabled = true;
+
+// Set multi vulnerable parameter group colour
+HighlightColor multipleVulnColor = HighlightColor.MAGENTA;
+VulnParamGroup[] groups = {ssrf, sql, xss, lfi, or, rce, idor, cmdInjection, pathTraversal, authBypass, xxe, fileUpload, rfi, csrf, htmlInjection, fileInclusion, insecureDeserialization};
+Set<String> foundParams = new HashSet<>();
+Map<HighlightColor, Integer> colorCounts = new HashMap<>();
+String combinedNotes = "";
+
+// Get the request object
+var request = requestResponse.request();
+
+// Main loop to check for matches
+for (VulnParamGroup group : groups) {
+    for (String paramName : group.parameterNames()) {
+        if (request.hasParameter(paramName, HttpParameterType.URL) ||
+            request.hasParameter(paramName, HttpParameterType.BODY)) {
+            if (highlightEnabled) {
+                foundParams.add(group.title() + ": " + paramName);
+                colorCounts.put(group.color(), colorCounts.getOrDefault(group.color(), 0) + 1);
+            }
+            // Return if only one vulnerability class applies
+            if (!highlightEnabled) {
+                requestResponse.annotations().setHighlightColor(group.color());
+                return true;
+            }
+        }
+    }
+}
+
+// If more than one vulnerability class applies set the multi vulnerable parameter colour
+if (!foundParams.isEmpty()) {
+    HighlightColor highlightColor = multipleVulnColor;
+    if (colorCounts.size() == 1) {
+        highlightColor = colorCounts.keySet().iterator().next();
+    }
+    
+    requestResponse.annotations().setHighlightColor(highlightColor);
+    combinedNotes = String.join(", ", foundParams);
+    requestResponse.annotations().setNotes(combinedNotes);
+    return true;
+}
+
+return false;
